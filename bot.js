@@ -47,19 +47,11 @@ const commands = [
                 .setRequired(true)),
 ].map(command => command.toJSON());
 
-// Register slash commands
+// Register slash commands (DISABLED - commands managed via register-commands.js)
 async function registerCommands() {
-    try {
-        const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
-        console.log('Registering slash commands...');
-        await rest.put(
-            Routes.applicationCommands(process.env.CLIENT_ID),
-            { body: commands }
-        );
-        console.log('Successfully registered slash commands!');
-    } catch (error) {
-        console.error('Error registering commands:', error);
-    }
+    // Commands are registered via the register-commands.js script
+    // Do not auto-register on bot startup to prevent overwriting
+    console.log('✅ Commands managed externally via register-commands.js');
 }
 
 // Collect historical data

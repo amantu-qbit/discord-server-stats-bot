@@ -281,9 +281,10 @@ function initializeWebPanel(client) {
 }
 
 function startWebPanel(port = 3000) {
-    server.listen(port, () => {
-        console.log(`🌐 Web panel running on http://localhost:${port}`);
-        console.log(`👤 Default login: admin / admin123 (CHANGE THIS!)`);
+    server.listen(port, '0.0.0.0', () => {
+        console.log(`🌐 Web panel running on http://0.0.0.0:${port}`);
+        console.log(`🌍 External access: http://89.117.60.143:${port}`);
+        console.log(`👤 Login: admin / ${process.env.ADMIN_PASSWORD}`);
     });
 }
 

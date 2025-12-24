@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Discord Bot Control Panel</title>
     <link rel="stylesheet" href="/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
 </head>
@@ -27,10 +28,11 @@
                 <h2>🤖 Bot Panel</h2>
             </div>
             <ul class="nav-menu">
-                <li><a href="#" data-page="overview" class="active">📊 Overview</a></li>
+                <li><a href="#" data-page="overview" class="active">📊 Dashboard</a></li>
                 <li><a href="#" data-page="servers">🏠 Servers</a></li>
                 <li><a href="#" data-page="system">💻 System Stats</a></li>
-                <li><a href="#" data-page="settings">⚙️ Settings</a></li>
+                <li><a href="#" data-page="moderation">🛡️ Moderation</a></li>
+                <li><a href="#" data-page="settings">⚙️ Bot Settings</a></li>
                 <li><a href="#" data-page="logs">📝 Logs</a></li>
                 <li><a href="#" id="logout-btn">🚪 Logout</a></li>
             </ul>
@@ -38,7 +40,7 @@
 
         <main class="main-content">
             <div class="content-section" id="overview-section">
-                <h1>Dashboard Overview</h1>
+                <h1>📊 Dashboard Overview</h1>
                 
                 <div class="stats-grid">
                     <div class="stat-card">
@@ -66,7 +68,7 @@
                         <div class="stat-icon">📡</div>
                         <div class="stat-info">
                             <h3 id="ping">0ms</h3>
-                            <p>Ping</p>
+                            <p>Latency</p>
                         </div>
                     </div>
                 </div>
@@ -77,25 +79,105 @@
                         <canvas id="performanceChart"></canvas>
                     </div>
                     <div class="chart-card">
-                        <h3>System Resources</h3>
+                        <h3>Real-time Monitoring</h3>
                         <canvas id="resourceChart"></canvas>
                     </div>
                 </div>
             </div>
 
             <div class="content-section" id="servers-section" style="display: none;">
-                <h1>Server Management</h1>
+                <h1>🏠 Server Management</h1>
                 <div id="servers-list" class="servers-list"></div>
             </div>
 
             <div class="content-section" id="system-section" style="display: none;">
-                <h1>System Statistics</h1>
+                <h1>💻 System Statistics</h1>
                 <div class="system-stats" id="system-stats"></div>
             </div>
 
+            <div class="content-section" id="moderation-section" style="display: none;">
+                <h1>🛡️ Moderation Settings</h1>
+                <div class="moderation-container">
+                    <h3>Auto-Moderation Settings</h3>
+                    
+                    <div class="setting-group">
+                        <label>Enable Auto-Moderation</label>
+                        <select id="automod-enabled">
+                            <option value="true">Enabled</option>
+                            <option value="false">Disabled</option>
+                        </select>
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Spam Protection</label>
+                        <select id="spam-protection">
+                            <option value="strict">Strict</option>
+                            <option value="moderate">Moderate</option>
+                            <option value="lenient">Lenient</option>
+                            <option value="off">Off</option>
+                        </select>
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Max Warnings Before Auto-Ban</label>
+                        <input type="number" id="max-warnings" placeholder="3" min="1" max="10" value="3">
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Bad Words Filter (comma separated)</label>
+                        <textarea id="bad-words" rows="3" placeholder="word1, word2, word3"></textarea>
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Anti-Raid Protection</label>
+                        <select id="anti-raid">
+                            <option value="true">Enabled</option>
+                            <option value="false">Disabled</option>
+                        </select>
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Log Channel ID</label>
+                        <input type="text" id="log-channel" placeholder="Channel ID for moderation logs">
+                    </div>
+
+                    <button class="btn-primary" id="save-moderation">💾 Save Moderation Settings</button>
+                    
+                    <h3 style="margin-top: 40px;">Quick Actions</h3>
+                    <div class="mod-actions">
+                        <div class="mod-action-btn">
+                            <h4>🔇</h4>
+                            <p>Mute User</p>
+                        </div>
+                        <div class="mod-action-btn danger">
+                            <h4>🦶</h4>
+                            <p>Kick User</p>
+                        </div>
+                        <div class="mod-action-btn danger">
+                            <h4>🔨</h4>
+                            <p>Ban User</p>
+                        </div>
+                        <div class="mod-action-btn">
+                            <h4>⚠️</h4>
+                            <p>Warn User</p>
+                        </div>
+                        <div class="mod-action-btn">
+                            <h4>🧹</h4>
+                            <p>Clear Messages</p>
+                        </div>
+                        <div class="mod-action-btn">
+                            <h4>🔒</h4>
+                            <p>Lock Channel</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="content-section" id="settings-section" style="display: none;">
-                <h1>Bot Settings</h1>
+                <h1>⚙️ Bot Settings</h1>
                 <div class="settings-container">
+                    <h3>Status & Presence</h3>
+                    
                     <div class="setting-group">
                         <label>Bot Status</label>
                         <select id="bot-status">
@@ -105,16 +187,40 @@
                             <option value="invisible">⚪ Invisible</option>
                         </select>
                     </div>
+
+                    <div class="setting-group">
+                        <label>Activity Type</label>
+                        <select id="activity-type">
+                            <option value="PLAYING">Playing</option>
+                            <option value="WATCHING">Watching</option>
+                            <option value="LISTENING">Listening to</option>
+                            <option value="COMPETING">Competing in</option>
+                        </select>
+                    </div>
+
                     <div class="setting-group">
                         <label>Activity Text</label>
-                        <input type="text" id="activity-text" placeholder="Playing something...">
+                        <input type="text" id="activity-text" placeholder="with server stats...">
                     </div>
-                    <button id="save-settings" class="btn-primary">Save Settings</button>
+
+                    <h3 style="margin-top: 30px;">Notification Settings</h3>
+
+                    <div class="setting-group">
+                        <label>Send Notifications For</label>
+                        <select id="notification-level">
+                            <option value="all">All Events</option>
+                            <option value="important">Important Only</option>
+                            <option value="critical">Critical Only</option>
+                            <option value="none">None</option>
+                        </select>
+                    </div>
+
+                    <button class="btn-primary" id="save-settings">💾 Save Settings</button>
                 </div>
             </div>
 
             <div class="content-section" id="logs-section" style="display: none;">
-                <h1>Bot Logs</h1>
+                <h1>📝 Bot Logs</h1>
                 <div class="logs-container" id="logs-container"></div>
             </div>
         </main>

@@ -66,9 +66,34 @@ const commands = [
                 .setRequired(true)),
 ].map(command => command.toJSON());
 
-// Register slash commands (disabled - use register-commands.js script instead)
+// Register slash commands
+// Register slash commands
 async function registerCommands() {
-    console.log('✅ Commands managed via register-commands.js script');
+    // Commands are registered via register-commands.js script
+    console.log('✅ Using pre-registered commands');
+}
+
+// Collect historical data
+function collectHistoricalData() {
+    setInterval(async () => {
+        try {
+            const cpuData = await si.currentLoad();
+            const memData = await si.mem();
+
+            historyData.cpu.push(cpuData.currentLoad);
+            historyData.memory.push((memData.used / memData.total) * 100);
+            historyData.timestamps.push(new Date());
+
+            // Keep only last N data points
+            if (historyData.cpu.length > historyData.maxDataPoints) {
+                historyData.cpu.shift();
+                historyData.memory.shift();
+                historyData.timestamps.shift();
+            }
+        } catch (error) {
+            console.error('Error collecting historical data:', error);
+        }
+    }, 60000); // Every minute
 }
 
 // Get overview stats

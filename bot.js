@@ -3,31 +3,11 @@ const { Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder, SlashCommand
 const si = require('systeminformation');
 const { createStatsChart, createHistoryChart } = require('./chartGenerator');
 const { formatBytes, formatUptime, getStatusEmoji, getUsageColor } = require('./utils');
-const { initializeWebPanel, startWebPanel } = require('./webPanel');
-
-// Try to load optional modules
-let musicModule = null;
-let moderationModule = null;
-
-try {
-    musicModule = require('./music');
-    console.log('🎵 Music module loaded');
-} catch (e) {
-    console.log('⚠️  Music module not available');
-}
-
-try {
-    moderationModule = require('./moderation');
-    console.log('🛡️  Moderation module loaded');
-} catch (e) {
-    console.log('⚠️  Moderation module not available');
-}
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.GuildVoiceStates,
     ]
 });
 
@@ -66,9 +46,42 @@ const commands = [
                 .setRequired(true)),
 ].map(command => command.toJSON());
 
-// Register slash commands (disabled - use register-commands.js script instead)
+// Register slash commands
 async function registerCommands() {
-    console.log('✅ Commands managed via register-commands.js script');
+    try {
+        const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
+        console.log('Registering slash commands...');
+        await rest.put(
+            Routes.applicationCommands(process.env.CLIENT_ID),
+            { body: commands }
+        );
+        console.log('Successfully registered slash commands!');
+    } catch (error) {
+        console.error('Error registering commands:', error);
+    }
+}
+
+// Collect historical data
+function collectHistoricalData() {
+    setInterval(async () => {
+        try {
+            const cpuData = await si.currentLoad();
+            const memData = await si.mem();
+
+            historyData.cpu.push(cpuData.currentLoad);
+            historyData.memory.push((memData.used / memData.total) * 100);
+            historyData.timestamps.push(new Date());
+
+            // Keep only last N data points
+            if (historyData.cpu.length > historyData.maxDataPoints) {
+                historyData.cpu.shift();
+                historyData.memory.shift();
+                historyData.timestamps.shift();
+            }
+        } catch (error) {
+            console.error('Error collecting historical data:', error);
+        }
+    }, 60000); // Every minute
 }
 
 // Get overview stats
@@ -532,59 +545,7 @@ client.on('interactionCreate', async interaction => {
             }
 
             await interaction.editReply(response);
-        } 
-        // Music commands
-        else if (musicModule && interaction.commandName === 'play') {
-            const query = interaction.options.getString('query');
-            await musicModule.playMusic(interaction, query);
-        }
-        else if (musicModule && interaction.commandName === 'skip') {
-            await musicModule.skipTrack(interaction);
-        }
-        else if (musicModule && interaction.commandName === 'pause') {
-            await musicModule.pauseMusic(interaction);
-        }
-        else if (musicModule && interaction.commandName === 'resume') {
-            await musicModule.resumeMusic(interaction);
-        }
-        else if (musicModule && interaction.commandName === 'stop') {
-            await musicModule.stopMusic(interaction);
-        }
-        else if (musicModule && interaction.commandName === 'queue') {
-            await musicModule.getQueue(interaction);
-        }
-        // Moderation commands
-        else if (moderationModule && interaction.commandName === 'kick') {
-            await moderationModule.kickMember(interaction);
-        }
-        else if (moderationModule && interaction.commandName === 'ban') {
-            await moderationModule.banMember(interaction);
-        }
-        else if (moderationModule && interaction.commandName === 'unban') {
-            await moderationModule.unbanMember(interaction);
-        }
-        else if (moderationModule && interaction.commandName === 'timeout') {
-            await moderationModule.timeoutMember(interaction);
-        }
-        else if (moderationModule && interaction.commandName === 'warn') {
-            await moderationModule.warnMember(interaction);
-        }
-        else if (moderationModule && interaction.commandName === 'warnings') {
-            await moderationModule.checkWarnings(interaction);
-        }
-        else if (moderationModule && interaction.commandName === 'clear') {
-            await moderationModule.clearMessages(interaction);
-        }
-        else if (moderationModule && interaction.commandName === 'slowmode') {
-            await moderationModule.setSlowmode(interaction);
-        }
-        else if (moderationModule && interaction.commandName === 'lock') {
-            await moderationModule.lockChannel(interaction);
-        }
-        else if (moderationModule && interaction.commandName === 'unlock') {
-            await moderationModule.unlockChannel(interaction);
-        }
-        else if (interaction.commandName === 'autostat') {
+        } else if (interaction.commandName === 'autostat') {
             const enable = interaction.options.getBoolean('enable');
             
             if (enable) {
@@ -666,20 +627,6 @@ async function updateStats() {
 client.once('ready', async () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
     console.log('🤖 Bot is ready to monitor server statistics!');
-    
-    // Initialize music player if available
-    if (musicModule) {
-        try {
-            musicModule.initializePlayer(client);
-            console.log('🎵 Music player initialized');
-        } catch (e) {
-            console.log('⚠️  Music player initialization failed');
-        }
-    }
-    
-    // Initialize web panel
-    initializeWebPanel(client);
-    startWebPanel(process.env.WEB_PANEL_PORT || 3067);
     
     // Start collecting historical data
     collectHistoricalData();

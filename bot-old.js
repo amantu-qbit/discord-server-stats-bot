@@ -1,19 +1,13 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder, SlashCommandBuilder, REST, Routes, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionFlagsBits } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder, SlashCommandBuilder, REST, Routes, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
 const si = require('systeminformation');
 const { createStatsChart, createHistoryChart } = require('./chartGenerator');
 const { formatBytes, formatUptime, getStatusEmoji, getUsageColor } = require('./utils');
-const { initializePlayer, playMusic, skipTrack, pauseMusic, resumeMusic, stopMusic, getQueue } = require('./music');
-const moderation = require('./moderation');
-const { initializeWebPanel, startWebPanel } = require('./webPanel');
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.GuildVoiceStates,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers,
     ]
 });
 
@@ -22,19 +16,11 @@ const historyData = {
     cpu: [],
     memory: [],
     timestamps: [],
-    maxDataPoints: 60
+    maxDataPoints: 60 // Last 60 readings
 };
-
-// Store the message ID for editing
-let statusMessageId = null;
-let updateInterval = null;
-
-// Initialize music player
-let player;
 
 // Commands definition
 const commands = [
-    // Stats commands
     new SlashCommandBuilder()
         .setName('stats')
         .setDescription('Display server statistics')
@@ -51,169 +37,27 @@ const commands = [
                     { name: 'Detailed', value: 'detailed' },
                     { name: 'History', value: 'history' }
                 )),
-    
-    // Music commands
     new SlashCommandBuilder()
-        .setName('play')
-        .setDescription('Play music')
-        .addStringOption(option =>
-            option.setName('query')
-                .setDescription('Song name or URL')
+        .setName('autostat')
+        .setDescription('Toggle automatic status updates in this channel')
+        .addBooleanOption(option =>
+            option.setName('enable')
+                .setDescription('Enable or disable auto-updates')
                 .setRequired(true)),
-    
-    new SlashCommandBuilder()
-        .setName('skip')
-        .setDescription('Skip current track'),
-    
-    new SlashCommandBuilder()
-        .setName('pause')
-        .setDescription('Pause music'),
-    
-    new SlashCommandBuilder()
-        .setName('resume')
-        .setDescription('Resume music'),
-    
-    new SlashCommandBuilder()
-        .setName('stop')
-        .setDescription('Stop music and clear queue'),
-    
-    new SlashCommandBuilder()
-        .setName('queue')
-        .setDescription('Show music queue'),
-    
-    // Moderation commands
-    new SlashCommandBuilder()
-        .setName('kick')
-        .setDescription('Kick a member')
-        .addUserOption(option =>
-            option.setName('user')
-                .setDescription('User to kick')
-                .setRequired(true))
-        .addStringOption(option =>
-            option.setName('reason')
-                .setDescription('Reason for kick')
-                .setRequired(false))
-        .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
-    
-    new SlashCommandBuilder()
-        .setName('ban')
-        .setDescription('Ban a member')
-        .addUserOption(option =>
-            option.setName('user')
-                .setDescription('User to ban')
-                .setRequired(true))
-        .addStringOption(option =>
-            option.setName('reason')
-                .setDescription('Reason for ban')
-                .setRequired(false))
-        .addIntegerOption(option =>
-            option.setName('delete_days')
-                .setDescription('Days of messages to delete (0-7)')
-                .setRequired(false)
-                .setMinValue(0)
-                .setMaxValue(7))
-        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
-    
-    new SlashCommandBuilder()
-        .setName('unban')
-        .setDescription('Unban a user')
-        .addStringOption(option =>
-            option.setName('user_id')
-                .setDescription('User ID to unban')
-                .setRequired(true))
-        .addStringOption(option =>
-            option.setName('reason')
-                .setDescription('Reason for unban')
-                .setRequired(false))
-        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
-    
-    new SlashCommandBuilder()
-        .setName('timeout')
-        .setDescription('Timeout a member')
-        .addUserOption(option =>
-            option.setName('user')
-                .setDescription('User to timeout')
-                .setRequired(true))
-        .addIntegerOption(option =>
-            option.setName('duration')
-                .setDescription('Duration in minutes')
-                .setRequired(true))
-        .addStringOption(option =>
-            option.setName('reason')
-                .setDescription('Reason for timeout')
-                .setRequired(false))
-        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
-    
-    new SlashCommandBuilder()
-        .setName('warn')
-        .setDescription('Warn a member')
-        .addUserOption(option =>
-            option.setName('user')
-                .setDescription('User to warn')
-                .setRequired(true))
-        .addStringOption(option =>
-            option.setName('reason')
-                .setDescription('Reason for warning')
-                .setRequired(true))
-        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
-    
-    new SlashCommandBuilder()
-        .setName('warnings')
-        .setDescription('Check warnings for a user')
-        .addUserOption(option =>
-            option.setName('user')
-                .setDescription('User to check')
-                .setRequired(true))
-        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
-    
-    new SlashCommandBuilder()
-        .setName('clear')
-        .setDescription('Clear messages')
-        .addIntegerOption(option =>
-            option.setName('amount')
-                .setDescription('Number of messages to clear (1-100)')
-                .setRequired(true)
-                .setMinValue(1)
-                .setMaxValue(100))
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
-    
-    new SlashCommandBuilder()
-        .setName('slowmode')
-        .setDescription('Set channel slowmode')
-        .addIntegerOption(option =>
-            option.setName('seconds')
-                .setDescription('Slowmode duration in seconds (0 to disable)')
-                .setRequired(true)
-                .setMinValue(0)
-                .setMaxValue(21600))
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
-    
-    new SlashCommandBuilder()
-        .setName('lock')
-        .setDescription('Lock the current channel')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
-    
-    new SlashCommandBuilder()
-        .setName('unlock')
-        .setDescription('Unlock the current channel')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
 ].map(command => command.toJSON());
 
-console.log('Registering commands...');
 // Register slash commands
 async function registerCommands() {
     try {
         const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
-        console.log('📝 Registering slash commands...');
+        console.log('Registering slash commands...');
         await rest.put(
             Routes.applicationCommands(process.env.CLIENT_ID),
             { body: commands }
         );
-        console.log('✅ Successfully registered slash commands!');
-        if (global.webPanelLog) global.webPanelLog('Slash commands registered successfully');
+        console.log('Successfully registered slash commands!');
     } catch (error) {
         console.error('Error registering commands:', error);
-        if (global.webPanelLog) global.webPanelLog('Error registering commands: ' + error.message, 'error');
     }
 }
 
@@ -228,6 +72,7 @@ function collectHistoricalData() {
             historyData.memory.push((memData.used / memData.total) * 100);
             historyData.timestamps.push(new Date());
 
+            // Keep only last N data points
             if (historyData.cpu.length > historyData.maxDataPoints) {
                 historyData.cpu.shift();
                 historyData.memory.shift();
@@ -236,20 +81,7 @@ function collectHistoricalData() {
         } catch (error) {
             console.error('Error collecting historical data:', error);
         }
-    }, 60000);
-}
-
-// Create refresh button
-function createRefreshButton() {
-    const refreshButton = new ButtonBuilder()
-        .setCustomId('refresh_stats')
-        .setLabel('🔄 Refresh Now')
-        .setStyle(ButtonStyle.Primary);
-
-    const row = new ActionRowBuilder()
-        .addComponents(refreshButton);
-
-    return row;
+    }, 60000); // Every minute
 }
 
 // Get overview stats
@@ -529,6 +361,19 @@ async function getNetworkStats() {
     return { embeds: [embed] };
 }
 
+// Create refresh button
+function createRefreshButton() {
+    const refreshButton = new ButtonBuilder()
+        .setCustomId('refresh_stats')
+        .setLabel('🔄 Refresh Now')
+        .setStyle(ButtonStyle.Primary);
+
+    const row = new ActionRowBuilder()
+        .addComponents(refreshButton);
+
+    return row;
+}
+
 // Get detailed stats with charts
 async function getDetailedStats(includeButton = true) {
     const [cpu, mem, disk, osInfo, time, processes] = await Promise.all([
@@ -639,43 +484,6 @@ async function getHistoryStats() {
     return { embeds: [embed], files: [attachment] };
 }
 
-// Function to update stats
-async function updateStats() {
-    try {
-        const channel = await client.channels.fetch(process.env.STATUS_CHANNEL_ID);
-        if (!channel) {
-            console.error('❌ Could not find channel');
-            return;
-        }
-
-        const stats = await getDetailedStats(true);
-        
-        // Try to edit existing message, otherwise send new one
-        if (statusMessageId) {
-            try {
-                const message = await channel.messages.fetch(statusMessageId);
-                await message.edit(stats);
-                console.log(`🔄 Stats auto-updated at ${new Date().toLocaleTimeString()}`);
-                if (global.webPanelLog) global.webPanelLog(`Stats auto-updated at ${new Date().toLocaleTimeString()}`);
-            } catch (editError) {
-                console.log('Could not edit message, sending new one...');
-                const newMessage = await channel.send(stats);
-                statusMessageId = newMessage.id;
-                console.log(`📊 New stats message sent at ${new Date().toLocaleTimeString()}`);
-                if (global.webPanelLog) global.webPanelLog(`New stats message sent`);
-            }
-        } else {
-            const newMessage = await channel.send(stats);
-            statusMessageId = newMessage.id;
-            console.log(`📊 Stats message sent at ${new Date().toLocaleTimeString()}`);
-            if (global.webPanelLog) global.webPanelLog(`Stats message sent`);
-        }
-    } catch (error) {
-        console.error('Error updating stats:', error);
-        if (global.webPanelLog) global.webPanelLog('Error updating stats: ' + error.message, 'error');
-    }
-}
-
 // Handle button interactions
 client.on('interactionCreate', async interaction => {
     // Handle button clicks
@@ -688,7 +496,6 @@ client.on('interactionCreate', async interaction => {
                 await interaction.editReply(stats);
                 
                 console.log(`🔄 Manual refresh triggered by ${interaction.user.tag} at ${new Date().toLocaleTimeString()}`);
-                if (global.webPanelLog) global.webPanelLog(`Manual refresh by ${interaction.user.tag}`);
             } catch (error) {
                 console.error('Error handling refresh button:', error);
                 try {
@@ -708,7 +515,6 @@ client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
     try {
-        // Stats commands
         if (interaction.commandName === 'stats') {
             await interaction.deferReply();
 
@@ -739,66 +545,38 @@ client.on('interactionCreate', async interaction => {
             }
 
             await interaction.editReply(response);
+        } else if (interaction.commandName === 'autostat') {
+            const enable = interaction.options.getBoolean('enable');
+            
+            if (enable) {
+                // Store channel ID for auto-updates
+                process.env.STATUS_CHANNEL_ID = interaction.channelId;
+                await interaction.reply({
+                    embeds: [
+                        new EmbedBuilder()
+                            .setColor('#2ecc71')
+                            .setTitle('✅ Auto-Stats Enabled')
+                            .setDescription(`Automatic status updates will be posted in this channel every ${process.env.UPDATE_INTERVAL || 5} minutes.`)
+                    ]
+                });
+            } else {
+                process.env.STATUS_CHANNEL_ID = '';
+                await interaction.reply({
+                    embeds: [
+                        new EmbedBuilder()
+                            .setColor('#e74c3c')
+                            .setTitle('❌ Auto-Stats Disabled')
+                            .setDescription('Automatic status updates have been disabled.')
+                    ]
+                });
+            }
         }
-        // Music commands
-        else if (interaction.commandName === 'play') {
-            const query = interaction.options.getString('query');
-            await playMusic(interaction, query);
-        }
-        else if (interaction.commandName === 'skip') {
-            await skipTrack(interaction);
-        }
-        else if (interaction.commandName === 'pause') {
-            await pauseMusic(interaction);
-        }
-        else if (interaction.commandName === 'resume') {
-            await resumeMusic(interaction);
-        }
-        else if (interaction.commandName === 'stop') {
-            await stopMusic(interaction);
-        }
-        else if (interaction.commandName === 'queue') {
-            await getQueue(interaction);
-        }
-        // Moderation commands
-        else if (interaction.commandName === 'kick') {
-            await moderation.kickMember(interaction);
-        }
-        else if (interaction.commandName === 'ban') {
-            await moderation.banMember(interaction);
-        }
-        else if (interaction.commandName === 'unban') {
-            await moderation.unbanMember(interaction);
-        }
-        else if (interaction.commandName === 'timeout') {
-            await moderation.timeoutMember(interaction);
-        }
-        else if (interaction.commandName === 'warn') {
-            await moderation.warnMember(interaction);
-        }
-        else if (interaction.commandName === 'warnings') {
-            await moderation.checkWarnings(interaction);
-        }
-        else if (interaction.commandName === 'clear') {
-            await moderation.clearMessages(interaction);
-        }
-        else if (interaction.commandName === 'slowmode') {
-            await moderation.setSlowmode(interaction);
-        }
-        else if (interaction.commandName === 'lock') {
-            await moderation.lockChannel(interaction);
-        }
-        else if (interaction.commandName === 'unlock') {
-            await moderation.unlockChannel(interaction);
-        }
-        
-        if (global.webPanelLog) global.webPanelLog(`Command /${interaction.commandName} used by ${interaction.user.tag}`);
     } catch (error) {
         console.error('Error handling command:', error);
         const errorEmbed = new EmbedBuilder()
             .setColor('#e74c3c')
             .setTitle('❌ Error')
-            .setDescription('An error occurred while executing this command.')
+            .setDescription('An error occurred while fetching statistics.')
             .setTimestamp();
 
         if (interaction.deferred) {
@@ -809,23 +587,52 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
+// Store the message ID for editing
+let statusMessageId = null;
+let updateInterval = null;
+
+// Function to update stats
+async function updateStats() {
+    try {
+        const channel = await client.channels.fetch(process.env.STATUS_CHANNEL_ID);
+        if (!channel) {
+            console.error('❌ Could not find channel');
+            return;
+        }
+
+        const stats = await getDetailedStats(true);
+        
+        // Try to edit existing message, otherwise send new one
+        if (statusMessageId) {
+            try {
+                const message = await channel.messages.fetch(statusMessageId);
+                await message.edit(stats);
+                console.log(`🔄 Stats auto-updated at ${new Date().toLocaleTimeString()}`);
+            } catch (editError) {
+                console.log('Could not edit message, sending new one...');
+                const newMessage = await channel.send(stats);
+                statusMessageId = newMessage.id;
+                console.log(`📊 New stats message sent at ${new Date().toLocaleTimeString()}`);
+            }
+        } else {
+            const newMessage = await channel.send(stats);
+            statusMessageId = newMessage.id;
+            console.log(`📊 Stats message sent at ${new Date().toLocaleTimeString()}`);
+        }
+    } catch (error) {
+        console.error('Error updating stats:', error);
+    }
+}
+
 client.once('ready', async () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
-    console.log('🤖 Bot is ready!');
-    
-    // Initialize music player
-    player = initializePlayer(client);
-    console.log('🎵 Music player initialized');
-    
-    // Initialize web panel
-    initializeWebPanel(client);
-    startWebPanel(process.env.WEB_PANEL_PORT || 3000);
+    console.log('🤖 Bot is ready to monitor server statistics!');
     
     // Start collecting historical data
     collectHistoricalData();
     
     // Register commands
-    await registerCommands();
+    registerCommands();
 
     // Auto-update if channel is configured
     if (process.env.STATUS_CHANNEL_ID) {

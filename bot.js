@@ -3,6 +3,7 @@ const { Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder, SlashCommand
 const si = require('systeminformation');
 const { createStatsChart, createHistoryChart } = require('./chartGenerator');
 const { formatBytes, formatUptime, getStatusEmoji, getUsageColor } = require('./utils');
+const { initializeWebPanel, startWebPanel } = require('./webPanel');
 
 const client = new Client({
     intents: [
@@ -627,6 +628,10 @@ async function updateStats() {
 client.once('ready', async () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
     console.log('🤖 Bot is ready to monitor server statistics!');
+    
+    // Initialize web panel
+    initializeWebPanel(client);
+    startWebPanel(process.env.WEB_PANEL_PORT || 3067);
     
     // Start collecting historical data
     collectHistoricalData();

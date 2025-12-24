@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder, SlashCommandBuilder, REST, Routes } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder, SlashCommandBuilder, REST, Routes, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
 const si = require('systeminformation');
 const { createStatsChart, createHistoryChart } = require('./chartGenerator');
 const { formatBytes, formatUptime, getStatusEmoji, getUsageColor } = require('./utils');
@@ -361,8 +361,21 @@ async function getNetworkStats() {
     return { embeds: [embed] };
 }
 
+// Create refresh button
+function createRefreshButton() {
+    const refreshButton = new ButtonBuilder()
+        .setCustomId('refresh_stats')
+        .setLabel('🔄 Refresh Now')
+        .setStyle(ButtonStyle.Primary);
+
+    const row = new ActionRowBuilder()
+        .addComponents(refreshButton);
+
+    return row;
+}
+
 // Get detailed stats with charts
-async function getDetailedStats() {
+async function getDetailedStats(includeButton = true) {
     const [cpu, mem, disk, osInfo, time, processes] = await Promise.all([
         si.currentLoad(),
         si.mem(),
@@ -417,10 +430,16 @@ async function getDetailedStats() {
             }
         )
         .setImage('attachment://stats-chart.png')
-        .setFooter({ text: 'Real-time system monitoring' })
+        .setFooter({ text: `Auto-updates every ${process.env.UPDATE_INTERVAL || 5} minutes • Click refresh for instant update` })
         .setTimestamp();
 
-    return { embeds: [embed], files: [attachment] };
+    const response = { embeds: [embed], files: [attachment] };
+    
+    if (includeButton) {
+        response.components = [createRefreshButton()];
+    }
+
+    return response;
 }
 
 // Get history stats with chart
@@ -465,8 +484,34 @@ async function getHistoryStats() {
     return { embeds: [embed], files: [attachment] };
 }
 
-// Handle slash commands
+// Handle button interactions
 client.on('interactionCreate', async interaction => {
+    // Handle button clicks
+    if (interaction.isButton()) {
+        if (interaction.customId === 'refresh_stats') {
+            try {
+                await interaction.deferUpdate();
+                
+                const stats = await getDetailedStats(true);
+                await interaction.editReply(stats);
+                
+                console.log(`🔄 Manual refresh triggered by ${interaction.user.tag} at ${new Date().toLocaleTimeString()}`);
+            } catch (error) {
+                console.error('Error handling refresh button:', error);
+                try {
+                    await interaction.followUp({ 
+                        content: '❌ Error refreshing stats. Please try again.', 
+                        ephemeral: true 
+                    });
+                } catch (e) {
+                    console.error('Error sending error message:', e);
+                }
+            }
+        }
+        return;
+    }
+
+    // Handle slash commands
     if (!interaction.isChatInputCommand()) return;
 
     try {
@@ -544,6 +589,40 @@ client.on('interactionCreate', async interaction => {
 
 // Store the message ID for editing
 let statusMessageId = null;
+let updateInterval = null;
+
+// Function to update stats
+async function updateStats() {
+    try {
+        const channel = await client.channels.fetch(process.env.STATUS_CHANNEL_ID);
+        if (!channel) {
+            console.error('❌ Could not find channel');
+            return;
+        }
+
+        const stats = await getDetailedStats(true);
+        
+        // Try to edit existing message, otherwise send new one
+        if (statusMessageId) {
+            try {
+                const message = await channel.messages.fetch(statusMessageId);
+                await message.edit(stats);
+                console.log(`🔄 Stats auto-updated at ${new Date().toLocaleTimeString()}`);
+            } catch (editError) {
+                console.log('Could not edit message, sending new one...');
+                const newMessage = await channel.send(stats);
+                statusMessageId = newMessage.id;
+                console.log(`📊 New stats message sent at ${new Date().toLocaleTimeString()}`);
+            }
+        } else {
+            const newMessage = await channel.send(stats);
+            statusMessageId = newMessage.id;
+            console.log(`📊 Stats message sent at ${new Date().toLocaleTimeString()}`);
+        }
+    } catch (error) {
+        console.error('Error updating stats:', error);
+    }
+}
 
 client.once('ready', async () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
@@ -557,51 +636,20 @@ client.once('ready', async () => {
 
     // Auto-update if channel is configured
     if (process.env.STATUS_CHANNEL_ID) {
+        const intervalMinutes = parseInt(process.env.UPDATE_INTERVAL) || 5;
         console.log(`📊 Auto-updates enabled for channel ${process.env.STATUS_CHANNEL_ID}`);
-        console.log(`⏱️  Update interval: ${process.env.UPDATE_INTERVAL || 5} minutes`);
+        console.log(`⏱️  Update interval: ${intervalMinutes} minutes`);
+        console.log(`🔄 Refresh button: Enabled for instant updates`);
         
         // Send initial message
-        try {
-            const channel = await client.channels.fetch(process.env.STATUS_CHANNEL_ID);
-            if (channel) {
-                const stats = await getDetailedStats();
-                const message = await channel.send(stats);
-                statusMessageId = message.id;
-                console.log('✅ Initial stats message posted!');
-            }
-        } catch (error) {
-            console.error('Error sending initial message:', error);
-        }
-
+        await updateStats();
+        
         // Update periodically
-        setInterval(async () => {
-            try {
-                const channel = await client.channels.fetch(process.env.STATUS_CHANNEL_ID);
-                if (channel) {
-                    const stats = await getDetailedStats();
-                    
-                    // Try to edit existing message, otherwise send new one
-                    if (statusMessageId) {
-                        try {
-                            const message = await channel.messages.fetch(statusMessageId);
-                            await message.edit(stats);
-                            console.log(`🔄 Stats updated at ${new Date().toLocaleTimeString()}`);
-                        } catch (editError) {
-                            // Message not found or can't edit, send new one
-                            const newMessage = await channel.send(stats);
-                            statusMessageId = newMessage.id;
-                            console.log(`📊 New stats message sent at ${new Date().toLocaleTimeString()}`);
-                        }
-                    } else {
-                        const newMessage = await channel.send(stats);
-                        statusMessageId = newMessage.id;
-                        console.log(`📊 Stats message sent at ${new Date().toLocaleTimeString()}`);
-                    }
-                }
-            } catch (error) {
-                console.error('Error sending auto-update:', error);
-            }
-        }, (process.env.UPDATE_INTERVAL || 5) * 60 * 1000);
+        updateInterval = setInterval(updateStats, intervalMinutes * 60 * 1000);
+        
+        console.log(`✅ Auto-update scheduled! Next update in ${intervalMinutes} minutes`);
+    } else {
+        console.log('⚠️  No STATUS_CHANNEL_ID configured - auto-updates disabled');
     }
 });
 

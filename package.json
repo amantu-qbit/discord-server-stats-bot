@@ -1,0 +1,20 @@
+{
+  "name": "discord-server-stats",
+  "version": "1.0.0",
+  "description": "Discord bot for monitoring server statistics with detailed metrics",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "node bot.js"
+  },
+  "keywords": ["discord", "bot", "monitoring", "stats", "system"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "systeminformation": "^5.21.20",
+    "chart.js": "^3.9.1",
+    "chartjs-node-canvas": "^4.1.6",
+    "dotenv": "^16.3.1"
+  }
+}
